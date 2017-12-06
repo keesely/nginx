@@ -7,59 +7,25 @@
 package nginx
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/shirou/gopsutil/host"
-	"github.com/shirou/gopsutil/process"
 	"os/exec"
 	"strings"
 	"syscall"
-	"time"
 	//"strconv"
 	//"github.com/keesely/kfiles"
 	//"github.com/shirou/gopsutil/internal/common"
 )
 
 type Nginx struct {
-	Pid    string // Nginx PID文件
-	Nginx  string // Nginx 可执行文件
-	prcess *process.Process
-}
-
-type Memory struct {
-	Percent     float32 `json:"percent"`
-	VirtualSize uint64  `json:"virtual_size"`
-	RealSize    uint64  `json:"real_size"`
-}
-
-type Status struct {
-	PID      int32   `json:"pid"`
-	CPU      float32 `json:"cpu"`
-	Memory   *Memory `json:"memory"`
-	Status   string  `json:"status"`
-	Start    string  `json:"start_at"`
-	Time     string  `json:"time"`
-	Hostname string  `json:"hostname"`
-	Subpid   []int32 `json:"sub_pid"`
+	Pid   string // Nginx PID文件
+	Nginx string // Nginx 可执行文件
 }
 
 type Result struct {
 	Code int32        `json:"code"`
 	Msg  string       `json:"msg"`
 	Data *interface{} `json:"data"`
-}
-
-// String returns JSON value of the memory info
-func (obj *Memory) String() string {
-	str, _ := json.Marshal(obj)
-	return string(str)
-}
-
-// String returns JSON value of the status info
-func (obj *Status) String() string {
-	str, _ := json.Marshal(obj)
-	return string(str)
 }
 
 /**
@@ -71,64 +37,27 @@ func (this *Nginx) Status() (*Status, error) {
 	pid, err := getPid(this)
 
 	if err != nil {
+		fmt.Println(err)
 		return nil, err
 	}
 
-	if pexis, _ := process.PidExists(int32(pid)); pexis == false {
-		return nil, errors.New("进程ID不存在")
-	}
+	process := new(Process)
+	proc, perr := process.New(int32(pid))
 
-	proc, err := process.NewProcess(int32(pid))
-
-	// CPU占用比例
-	cpu, _ := proc.CPUPercent()
-
-	// 内存信息
-	mem_info, _ := proc.MemoryInfo()
-	// 内存占用比例
-	m_percent, _ := proc.MemoryPercent()
-
-	// 内存详情
-	mem := &Memory{
-		Percent:     m_percent,
-		VirtualSize: mem_info.VMS,
-		RealSize:    mem_info.RSS,
-	}
-
-	// 运行状态
-	status, _ := proc.Status()
-
-	// 启动时间
-	start_f, _ := proc.CreateTime()
-	start := time.Unix(start_f/1000, start_f).Format(time.RFC3339)
-
-	// 运行时长
-	ttl_f := time.Now().Sub(time.Unix(start_f/1000, start_f)).Seconds()
-	ttl := fmt.Sprintf("%.5f", ttl_f)
-
-	// 主机名
-	host, _ := host.Info()
-
-	// 子进程
-	children, serr := proc.Children()
-
-	sub := make([]int32, 0)
-
-	if serr == nil {
-		for _, spid := range children {
-			sub = append(sub, int32(spid.Pid))
-		}
+	if perr != nil {
+		return nil, perr
 	}
 
 	p := &Status{
-		PID:      proc.Pid,
-		CPU:      float32(cpu),
-		Memory:   mem,
-		Status:   status,
-		Start:    start,
-		Time:     ttl,
-		Hostname: host.Hostname,
-		Subpid:   sub,
+		PID:     proc.Pid,
+		CPU:     float32(proc.Cpu()),
+		Memory:  proc.Memory(),
+		Status:  proc.Status(),
+		Start:   proc.StartDateTime(),
+		Time:    proc.Time(),
+		Host:    proc.Host(),
+		IpAddrs: proc.Internal(),
+		Subpid:  proc.Children(),
 	}
 
 	return p, err
