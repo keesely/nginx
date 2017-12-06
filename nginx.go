@@ -130,6 +130,10 @@ func (this *Nginx) Start() (bool, error) {
 	}
 
 	// 测试文档
+	test, terr := this.Test()
+	if false == test {
+		return false, terr
+	}
 
 	start := exec.Command("/bin/sh", "-c", this.Nginx)
 	startResult, err := start.CombinedOutput()
@@ -139,6 +143,28 @@ func (this *Nginx) Start() (bool, error) {
 	}
 	if err != nil {
 		return false, errors.New("Start error: " + err.Error())
+	}
+
+	return true, nil
+}
+
+// 重载 Nginx 服务
+func (this *Nginx) Reload() (bool, error) {
+	status, _ := this.Status()
+
+	if status == nil {
+		return this.Start()
+	}
+
+	test, terr := this.Test()
+	if false == test {
+		return false, terr
+	}
+
+	pid := status.PID
+	err := syscall.Kill(int(pid), syscall.SIGHUP)
+	if err != nil {
+		return false, err
 	}
 
 	return true, nil
@@ -160,23 +186,6 @@ func (this *Nginx) Stop() (bool, error) {
 
 	if err != nil {
 		return false, errors.New("nginx -s stop Error: \n" + (err.Error()))
-	}
-
-	return true, nil
-}
-
-// 重载 Nginx 服务
-func (this *Nginx) Reload() (bool, error) {
-	status, _ := this.Status()
-
-	if status == nil {
-		return this.Start()
-	}
-
-	pid := status.PID
-	err := syscall.Kill(int(pid), syscall.SIGHUP)
-	if err != nil {
-		return false, err
 	}
 
 	return true, nil
