@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"github.com/keesely/kfiles"
 	"github.com/shirou/gopsutil/host"
+	pnet "github.com/shirou/gopsutil/net"
 	"github.com/shirou/gopsutil/process"
 	"net"
 	"strconv"
@@ -26,20 +27,38 @@ type Memory struct {
 }
 
 type Status struct {
-	PID     int32          `json:"pid"`
-	CPU     float32        `json:"cpu"`
-	Memory  *Memory        `json:"memory"`
-	Status  string         `json:"status"`
-	Start   string         `json:"start_at"`
-	Time    float32        `json:"time"`
-	Host    *host.InfoStat `json:"host"`
-	IpAddrs []string       `json:"ip_address"`
-	Subpid  []int32        `json:"sub_pid"`
+	PID      int32          `json:"pid"`
+	CPU      float32        `json:"cpu"`
+	Memory   *Memory        `json:"memory"`
+	Status   string         `json:"status"`
+	Start    string         `json:"start_at"`
+	Time     float32        `json:"time"`
+	Host     *host.InfoStat `json:"host"`
+	Subpid   []int32        `json:"sub_pid"`
+	IpAddrs  []string       `json:"ip_address"`
+	Networks *Networks      `json:"networks"`
 }
 
 type Process struct {
 	Pid     int32
 	Process *process.Process
+}
+
+type Addr struct {
+	IP   string `json:"ip"`
+	Port uint32 `json:port`
+}
+
+type Network struct {
+	Stat  string `json:"stat"`
+	Laddr string `json:"local_address"`
+	Raddr string `json:"remote_address"`
+}
+
+type Networks struct {
+	Network    []*Network            `json:"network"`
+	IOCounters []pnet.IOCountersStat `json:"io_counters"`
+	Total      map[string]int        `json:"total"`
 }
 
 // String returns JSON value of the memory info
@@ -112,6 +131,7 @@ func (this *Process) CreateTime() int64 {
 	return start_f
 }
 
+// 启动时间格式化
 func (this *Process) StartDateTime() string {
 	start_f := this.CreateTime()
 	start := time.Unix(start_f/1000, start_f).Format(time.RFC3339)
@@ -136,17 +156,21 @@ func (this *Process) Host() *host.InfoStat {
 
 // 子进程 PID 列表
 func (this *Process) Children() []int32 {
-	children, err := this.Process.Children()
+	subs := make([]int32, 0)
+	pid := this.Process.Pid
 
-	sub := make([]int32, 0)
+	procs, err := process.Processes()
+	if err != err {
+		return subs
+	}
 
-	if err == nil {
-		for _, spid := range children {
-			sub = append(sub, int32(spid.Pid))
+	for _, sub := range procs {
+		if ppid, _ := sub.Ppid(); ppid == pid {
+			subs = append(subs, int32(sub.Pid))
 		}
 	}
 
-	return sub
+	return subs
 }
 
 // 获取网卡IP
@@ -170,10 +194,57 @@ func (this *Process) Internal() []string {
 	return ip
 }
 
+// 获取网络情况
+func (this *Process) Networks() *Networks {
+	pid := this.Process.Pid
+
+	status_list := map[string]int{"LISTEN": 0, "ESTABLISHED": 0, "TIME_WAIT": 0, "CLOSE_WAIT": 0, "LAST_ACK": 0, "SYN_SENT": 0}
+	//status_list := &NetTotal{LISTEN: 0, ESTABLISHED: 0, TIME_WAIT: 0, CLOSE_WAIT: 0, LAST_ACK: 0, SYN_SENT: 0}
+
+	/**
+	networks := &Networks{
+		LISTEN:      make([]*Network, 0),
+		ESTABLISHED: make([]*Network, 0),
+		TIME_WAIT:   make([]*Network, 0),
+		CLOSE_WAIT:  make([]*Network, 0),
+		LAST_ACK:    make([]*Network, 0),
+		SYN_SENT:    make([]*Network, 0),
+		Total:       status_list,
+	}
+	*/
+	networks := make([]*Network, 0)
+
+	pn, _ := pnet.ConnectionsPid("tcp", int32(pid))
+
+	for _, sub_pc := range pn {
+		net := &Network{
+			Stat:  sub_pc.Status,
+			Laddr: sub_pc.Laddr.IP + ":" + fmt.Sprintf("%d", sub_pc.Laddr.Port),
+			Raddr: sub_pc.Raddr.IP + ":" + fmt.Sprintf("%d", sub_pc.Raddr.Port),
+			//Laddr: &Addr{IP: sub_pc.Laddr.IP, Port: sub_pc.Laddr.Port},
+			//Raddr: &Addr{IP: sub_pc.Raddr.IP, Port: sub_pc.Raddr.Port},
+		}
+
+		status := string(sub_pc.Status)
+
+		networks = append(networks, net)
+
+		status_list[status] += 1
+	}
+
+	n, _ := this.Process.NetIOCounters(false)
+
+	return &Networks{
+		Network:    networks,
+		Total:      status_list,
+		IOCounters: n,
+	}
+}
+
 // 获取 Nginx 进程PID
 func getPid(this *Nginx) (int32, error) {
 	if exists := kfiles.Exists(this.Pid); exists == false {
-		return int32(0), errors.New("PID文件不存在")
+		return int32(0), errors.New("PID文件不存在 : " + this.Pid)
 	}
 
 	fPid, err := kfiles.Get(this.Pid)
@@ -185,7 +256,7 @@ func getPid(this *Nginx) (int32, error) {
 	sPid := strings.Replace(fPid, "\n", "", -1)
 	sPid = fmt.Sprintf("%s", sPid)
 	if sPid == "" {
-		return int32(0), errors.New("PID不存在")
+		return int32(0), errors.New("PID不存在 : " + this.Pid)
 	}
 	pid, err := strconv.Atoi(sPid)
 

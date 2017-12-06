@@ -49,15 +49,16 @@ func (this *Nginx) Status() (*Status, error) {
 	}
 
 	p := &Status{
-		PID:     proc.Pid,
-		CPU:     float32(proc.Cpu()),
-		Memory:  proc.Memory(),
-		Status:  proc.Status(),
-		Start:   proc.StartDateTime(),
-		Time:    proc.Time(),
-		Host:    proc.Host(),
-		IpAddrs: proc.Internal(),
-		Subpid:  proc.Children(),
+		PID:      proc.Pid,
+		CPU:      float32(proc.Cpu()),
+		Memory:   proc.Memory(),
+		Status:   proc.Status(),
+		Start:    proc.StartDateTime(),
+		Time:     proc.Time(),
+		Host:     proc.Host(),
+		IpAddrs:  proc.Internal(),
+		Subpid:   proc.Children(),
+		Networks: proc.Networks(),
 	}
 
 	return p, err
