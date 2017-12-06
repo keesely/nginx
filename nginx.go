@@ -41,6 +41,7 @@ type Status struct {
 	Start    string  `json:"start_at"`
 	Time     string  `json:"time"`
 	Hostname string  `json:"hostname"`
+	Subpid   []int32 `json:"sub_pid"`
 }
 
 type Result struct {
@@ -108,6 +109,17 @@ func (this *Nginx) Status() (*Status, error) {
 	// 主机名
 	host, _ := host.Info()
 
+	// 子进程
+	children, serr := proc.Children()
+
+	sub := make([]int32, 0)
+
+	if serr == nil {
+		for _, spid := range children {
+			sub = append(sub, int32(spid.Pid))
+		}
+	}
+
 	p := &Status{
 		PID:      proc.Pid,
 		CPU:      float32(cpu),
@@ -116,6 +128,7 @@ func (this *Nginx) Status() (*Status, error) {
 		Start:    start,
 		Time:     ttl,
 		Hostname: host.Hostname,
+		Subpid:   sub,
 	}
 
 	return p, err
@@ -126,7 +139,7 @@ func (this *Nginx) Start() (bool, error) {
 	status, _ := this.Status()
 
 	if status != nil {
-		return false, errors.New("Nginx服务已经启动")
+		return true, errors.New("Nginx服务已经启动")
 	}
 
 	// 测试文档
