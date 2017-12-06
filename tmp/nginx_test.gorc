@@ -1,0 +1,44 @@
+/*************************************************************************
+    > File Name: nginx_test.go
+    > Author: Kee
+    > Mail: chinboy2012@gmail.com 
+    > Created Time: 2017.11.30
+ ************************************************************************/
+package nginx
+
+import (
+  "fmt"
+  "log"
+  "testing"
+)
+
+func Test (t *testing.T) {
+  ngx := new (Nginx)
+  ngx.Nginx = "/home/kee/package/tengine/nginx/sbin/nginx"
+  ngx.Pid_file = "/home/kee/package/tengine/nginx/logs/nginx.pid"
+  ngx.Conf_path = "/home/kee/package/tengine/nginx/conf/nginx.conf"
+  ngx.Vhost_path = "/home/kee/package/tengine/nginx/vhost"
+
+
+  proc, _ := ngx.Status()
+
+  //if err != nil {
+    //log.Fatal("Nginx 启动失败： ", err)
+  //}
+  if proc == nil || proc.Pid == 0 {
+    ngx.Start()
+  } else {
+    ngx.Reload()
+    fmt.Printf("Nginx 启动成功， PID(%d)\n", proc.Pid)
+
+    ngx.Stop()
+    proc, err := ngx.Status()
+    
+    if err != nil {
+      log.Fatal("Nginx 进程已关闭： ", err)
+    }
+    if (proc.Pid == 0) {
+      fmt.Println("Nginx 进程已停止")
+    }
+  }
+}

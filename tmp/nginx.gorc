@@ -1,0 +1,169 @@
+/*************************************************************************
+    > File Name: nginx.go
+    > Author: Kee
+    > Mail: chinboy2012@gmail.com 
+    > Created Time: 2017.11.29
+ ************************************************************************/
+package nginx
+
+import (
+  "fmt"
+  "strconv"
+  "os"
+  "os/exec"
+  "log"
+  "strings"
+  "github.com/keesely/kfiles"
+  "github.com/shirou/gopsutil/internal/common"
+)
+
+type Nginx struct {
+  Pid         int       // Nginx PID
+  Nginx       string    // Nginx 可执行文件
+  Pid_file    string    // Nginx PID 文件
+  Conf_path   string    // Nginx 配置文件
+  Vhost_path  string    // Nginx 虚拟主机文件
+}
+
+// 测试Nginx文档
+func (this* Nginx) Test () (string, bool) {
+	test := exec.Command("/bin/sh", "-c", this.Nginx + " -t")
+	testResult, err := test.CombinedOutput()
+
+	if err != nil {
+    log.Fatal("nginx testing err: ", err)
+	}
+
+  result := "nginx testing result:\n" + string(testResult)
+
+	if !strings.Contains(string(testResult), "successful") {
+		return result, false
+	}
+  return result, true
+}
+
+// 启动Nginx服务
+func (this* Nginx) Start () string {
+  if _, test := this.Test(); true != test {
+    return string("Nginx 配置文件存在错误，请修正")
+  }
+
+	start := exec.Command("/bin/sh", "-c", this.Nginx)
+	startResult, err := start.CombinedOutput()
+
+  if string(startResult) != "" {
+    return string("nginx starting Result: \n" + string(startResult))
+  }
+	if err != nil {
+    log.Fatal("nginx starting Error: \n", err)
+	}
+  return string("nginx starting ")
+}
+
+// 停止Nginx服务
+func (this* Nginx) Stop () string {
+  proc, err := this.Process()
+
+  if err != nil {
+    //log.Fatal(err)
+    return err.Error()
+  }
+
+  if proc.Pid == 0 {
+    return "nginx is stopped"
+  }
+
+	stop := exec.Command("/bin/sh", "-c", this.Nginx + " -s stop")
+	stopResult, err := stop.CombinedOutput()
+  if string(stopResult) != "" {
+    return "nginx stopped Result:\n" + string(stopResult)
+  }
+
+	if err != nil {
+    return "nginx -s stop Error: \n" + (err.Error())
+	}
+
+  return "nginx stopped"
+}
+
+// 重启Nginx服务
+func (this* Nginx) Restart () {
+  this.Stop()
+  this.Start()
+}
+
+// 重载Nginx
+func (this* Nginx) Reload () string {
+  proc, err := this.Process()
+
+  if err != nil {
+    return err.Error()
+  }
+
+  if proc.Pid == 0 {
+    return this.Start()
+  }
+
+  if _, test := this.Test(); true != test {
+    return string("Nginx 配置文件存在错误，请修正")
+  }
+
+	start := exec.Command("/bin/sh", "-c", this.Nginx + " -s reload")
+	startResult, err := start.CombinedOutput()
+
+  if string(startResult) != "" {
+    return string("nginx -s reload result:\n" + string(startResult))
+  }
+
+	if err != nil {
+    return string("nginx -s reload Error: \n"+ err.Error())
+	}
+
+  return string("nginx reload successful")
+}
+
+// 获取Nginx进程
+func (this* Nginx) Process () (* os.Process, error) {
+  pid, err := this.getPid()
+
+  if err == nil {
+    proc, err := os.FindProcess(pid)
+    return proc, err
+  }
+  return nil, err
+}
+
+// 获取Nginx状态
+func (this* Nginx) Status () (interface{}, error) {
+  pid, err := this.getPid()
+
+  if err != nil {
+    return nil, err
+  }
+  p := make(map[string]interface{}, 1)
+  proc, err := os.FindProcess(pid)
+  p["Process"] = proc
+  p["CPU"] = 1
+  p["Memory"] = 1
+  return p, err
+}
+
+func (this* Nginx) getPid () (int, error) {
+  if exists := kfiles.Exists(this.Pid_file); exists == false {
+    return 0, nil
+  }
+
+  fPid, err := kfiles.Get(this.Pid_file)
+
+  if err != nil {
+    return 0, err
+  }
+
+  sPid := strings.Replace(fPid, "\n", "", -1)
+  sPid = fmt.Sprintf("%s", sPid)
+  pid, err := strconv.Atoi(sPid)
+
+  this.Pid = pid
+
+  return pid, err
+}
